@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+
+    environment {
+        REGISTRY = "localrepo/ecommerce"
+        IMAGE_TAG = "v1.0"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/Nehakolte/ai-ecommerce-devops.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Security Checks') {
+            steps {
+                sh 'trivy fs . || true'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh 'docker build -t $REGISTRY:$IMAGE_TAG .'
+            }
+        }
+
+        stage('Image Scan') {
+            steps {
+                sh 'trivy image $REGISTRY:$IMAGE_TAG || true'
+            }
+        }
+
+        stage('Push Image') {
+            steps {
+                sh 'docker tag $REGISTRY:$IMAGE_TAG $REGISTRY:$IMAGE_TAG'
+                sh 'docker save $REGISTRY:$IMAGE_TAG > ecommerce.tar'
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh 'kubectl apply -f kubernetes/'
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                sh './scripts/health-check.sh'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline executed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check logs.'
+        }
+    }
+}
